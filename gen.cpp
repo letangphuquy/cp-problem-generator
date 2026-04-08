@@ -87,13 +87,25 @@ void gen_exact(long long val) {
 int main(int argc, char* argv[]) {
     ios_base::sync_with_stdio(false); cin.tie(NULL);
 
-    if (argc < 3) {
+    // XỬ LÝ LỖI INLINE COMMENT: Bỏ qua mọi tham số từ dấu '#' trở đi
+    int valid_argc = argc;
+    for (int i = 1; i < argc; i++) {
+        string arg = argv[i];
+        if (arg.length() > 0 && arg[0] == '#') {
+            valid_argc = i;
+            break;
+        }
+    }
+
+    if (valid_argc < 3) {
         cerr << "Usage: ./gen <mode> <args...> <seed>\n";
         return 1;
     }
 
     string mode = argv[1];
-    long long seed = stoll(argv[argc - 1]);
+    
+    // Bây giờ seed luôn là tham số hợp lệ cuối cùng trước comment
+    long long seed = stoll(argv[valid_argc - 1]);
     rng.seed(seed);
 
     if (mode == "exact") gen_exact(stoll(argv[2]));
