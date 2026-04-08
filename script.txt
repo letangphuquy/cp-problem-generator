@@ -1,0 +1,41 @@
+# ===== EDGE CASES (Các test mẫu và ranh giới) =====
+exact 1 1001
+exact 2 1002
+exact 3 1003
+exact 4 1004
+exact 11 1005
+exact 91 1006
+
+# ===== SUBTASK 1: N <= 10^4 (20 điểm - O(N)) =====
+random 10000 2001
+prime 10000 2002
+prime 10000 2003
+composite 10000 2004
+composite 10000 2005
+
+# ===== SUBTASK 2: N <= 10^9 (30 điểm - O(sqrt(N)) với Int) =====
+random 1000000000 3001
+prime 1000000000 3002
+prime 1000000000 3003
+composite 1000000000 3004
+hard_composite 1000000000 3005
+hard_composite 1000000000 3006
+
+# ===== SUBTASK 3: N <= 10^14 (30 điểm - Bắt buộc dùng long long) =====
+random 100000000000000 4001
+prime 100000000000000 4002
+prime 100000000000000 4003
+composite 100000000000000 4004
+hard_composite 100000000000000 4005
+hard_composite 100000000000000 4006
+exact 99999999999973 4007  # Số nguyên tố cận trên 10^14
+
+# ===== SUBTASK 4: N <= 10^18 (20 điểm - Miller-Rabin Testing) =====
+random 1000000000000000000 5001
+prime 1000000000000000000 5002
+prime 1000000000000000000 5003
+composite 1000000000000000000 5004
+hard_composite 1000000000000000000 5005
+hard_composite 1000000000000000000 5006
+exact 999999999999999989 5007  # Số nguyên tố siêu lớn cận 10^18
+exact 99999999999999997 5008   # Bẫy kích thước
