@@ -3,13 +3,11 @@ using namespace std;
 
 mt19937_64 rng;
 
-// ===== HÀM BỔ TRỢ CHO SỐ LỚN =====
-// Tính (a * b) % m chống tràn số khi a, b lên tới 10^18
+// ===== HÀM BỔ TRỢ ĐỂ SINH SỐ (Vẫn cần Miller-Rabin để filter số) =====
 long long mul_mod(long long a, long long b, long long m) {
     return (long long)((__int128_t)a * b % m);
 }
 
-// Tính (base^exp) % mod
 long long power(long long base, long long exp, long long mod) {
     long long res = 1;
     base %= mod;
@@ -21,7 +19,6 @@ long long power(long long base, long long exp, long long mod) {
     return res;
 }
 
-// ===== SOLUTION LÕI: MILLER-RABIN PRIMALITY TEST O(k * log^3 N) =====
 bool is_prime(long long n) {
     if (n < 2) return false;
     if (n == 2 || n == 3) return true;
@@ -34,7 +31,6 @@ bool is_prime(long long n) {
         s++;
     }
 
-    // Tập cơ số (bases) chuẩn xác 100% cho mọi số N <= 2^64
     static const int bases[] = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37};
     for (int a : bases) {
         if (n <= a) break;
@@ -53,32 +49,25 @@ bool is_prime(long long n) {
     return true;
 }
 
-// ===== IN OUTPUT =====
-void print_and_solve(long long n) {
-    cout << n << "\n";
-    cerr << (is_prime(n) ? "YES" : "NO") << "\n";
-}
-
-// ===== CÁC CHẾ ĐỘ SINH TEST (MODES) =====
+// ===== CÁC CHẾ ĐỘ SINH TEST (CHỈ IN RA INPUT) =====
 
 void gen_random(long long max_n) {
     long long n = 1 + rng() % max_n;
-    print_and_solve(n);
+    cout << n << "\n";
 }
 
 void gen_prime(long long max_n) {
     long long n;
     do { n = 2 + rng() % (max_n - 1); } while (!is_prime(n));
-    print_and_solve(n);
+    cout << n << "\n";
 }
 
 void gen_composite(long long max_n) {
     long long n;
     do { n = 4 + rng() % (max_n - 3); } while (is_prime(n));
-    print_and_solve(n);
+    cout << n << "\n";
 }
 
-// Cực kỳ lợi hại: Tạo ra hợp số kiểu RSA (tích của 2 số nguyên tố siêu to)
 void gen_hard_composite(long long max_n) {
     long long limit = sqrt(max_n);
     long long p1, p2;
@@ -87,11 +76,11 @@ void gen_hard_composite(long long max_n) {
     
     long long n = p1 * p2;
     if (n > max_n || n < 2) gen_composite(max_n);
-    else print_and_solve(n);
+    else cout << n << "\n";
 }
 
 void gen_exact(long long val) {
-    print_and_solve(val);
+    cout << val << "\n";
 }
 
 // ===== MAIN =====

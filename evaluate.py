@@ -1,12 +1,36 @@
 import sys
 import time
 import subprocess
+import platform
 from pathlib import Path
 
-# Cấu hình thời gian giới hạn (1.0 giây)
 TIME_LIMIT = 1.0 
 
-def evaluate(exec_path):
+def compile_solution(cpp_path):
+    cpp_file = Path(cpp_path)
+    if not cpp_file.exists():
+        print(f"❌ Không tìm thấy file: {cpp_path}")
+        sys.exit(1)
+
+    is_windows = platform.system() == "Windows"
+    exe_name = cpp_file.stem + (".exe" if is_windows else "")
+    exe_path = cpp_file.parent / exe_name
+
+    print(f"⏳ Đang tự động biên dịch {cpp_file.name}...")
+    compile_cmd = ["g++", "-O3", "-std=c++17", str(cpp_file), "-o", str(exe_path)]
+    
+    result = subprocess.run(compile_cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"❌ Lỗi biên dịch {cpp_file.name}:\n{result.stderr}")
+        sys.exit(1)
+        
+    print(f"✅ Biên dịch thành công!\n")
+    return exe_path
+
+def evaluate(cpp_path):
+    # 1. Tự động compile file .cpp đầu vào
+    exec_path = compile_solution(cpp_path)
+    
     test_dir = Path("tests")
     if not test_dir.exists():
         print("❌ Thư mục tests/ không tồn tại! Hãy chạy script sinh test trước.")
@@ -17,18 +41,16 @@ def evaluate(exec_path):
         print("❌ Không tìm thấy test nào trong thư mục!")
         return
 
-    # In Header bảng kết quả
     print(f"{'TEST NAME':<12} | {'VERDICT':<10} | {'TIME (ms)':<10}")
     print("-" * 40)
 
     passed = 0
     total = len(inp_files)
 
-    # Mã màu Terminal cho ngầu
-    C_AC = "\033[92m"    # Xanh lá
-    C_WA = "\033[91m"    # Đỏ
-    C_TLE = "\033[93m"   # Vàng
-    C_RTE = "\033[95m"   # Tím
+    C_AC = "\033[92m"    
+    C_WA = "\033[91m"    
+    C_TLE = "\033[93m"   
+    C_RTE = "\033[95m"   
     C_RESET = "\033[0m"
 
     for inp_path in inp_files:
@@ -41,9 +63,8 @@ def evaluate(exec_path):
             
             start_time = time.perf_counter()
             try:
-                # Chạy process với subprocess
                 result = subprocess.run(
-                    [exec_path],
+                    [str(exec_path)],
                     stdin=fin,
                     capture_output=True,
                     text=True,
@@ -51,42 +72,32 @@ def evaluate(exec_path):
                 )
                 elapsed = time.perf_counter() - start_time
                 
-                # Đánh giá Verdict
                 if result.returncode != 0:
-                    verdict = "RTE"
-                    color = C_RTE
+                    verdict, color = "RTE", C_RTE
                 else:
                     actual_out = result.stdout.strip()
                     if actual_out == expected_out:
-                        verdict = "AC"
-                        color = C_AC
+                        verdict, color = "AC", C_AC
                         passed += 1
                     else:
-                        verdict = "WA"
-                        color = C_WA
+                        verdict, color = "WA", C_WA
                         
             except subprocess.TimeoutExpired:
                 elapsed = TIME_LIMIT
-                verdict = "TLE"
-                color = C_TLE
+                verdict, color = "TLE", C_TLE
 
-            # Format dòng in ra
             v_str = f"{color}{verdict}{C_RESET}"
             time_str = f"{elapsed * 1000:>5.0f} ms"
-            
-            # 19 khoảng trắng để bù trừ độ dài mã màu ANSI trong f-string
             print(f"{inp_path.stem:<12} | {v_str:<19} | {time_str}")
 
-    # In kết quả tổng hợp
     print("-" * 40)
     score_color = C_AC if passed == total else C_WA
-    print(f"KẾT QUẢ: {score_color}{passed}/{total} TESTS PASSED{C_RESET}")
+    print(f"KẾT QUẢ CỦA {Path(cpp_path).name}: {score_color}{passed}/{total} TESTS PASSED{C_RESET}")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python evaluate.py <đường_dẫn_file_thực_thi>")
-        print("Ví dụ: python evaluate.py ./brute")
+        print("Usage: python evaluate.py <đường_dẫn_file_cpp>")
+        print("Ví dụ: python evaluate.py sol/brute.cpp")
         sys.exit(1)
         
-    exec_file = sys.argv[1]
-    evaluate(exec_file)
+    evaluate(sys.argv[1])
