@@ -33,7 +33,7 @@ GOTO :EOF
 ::
 :: Supported formats:  all  05  01,03,07  01-05  01-03,07,10-12
 ::
-:: Args: %~2 = spec string,  %~3 = total test count
+:: Args: %~2 = spec string, %~3 = total test count
 SETLOCAL ENABLEDELAYEDEXPANSION
 SET "SPEC=%~2"
 SET /A TOTAL=%~3
