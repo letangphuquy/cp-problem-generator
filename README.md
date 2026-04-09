@@ -138,6 +138,40 @@ test05 validate fail
 ```
 Flag `--retry` đọc file này và tự động xác định test nào cần chạy lại.
 
+### 1c\. Tuỳ chỉnh pipeline với CLI (Windows CMD)
+
+`generate.bat` hoàn toàn đồng bộ tính năng với `generate.sh`. Tất cả flags đều dùng cùng tên.
+
+**Cú pháp:**
+
+```cmd
+generate.bat [--phases <list>] [--tests <spec>] [--retry] [--continue-on-error] [--clean]
+```
+
+Các phase scripts cũng có thể gọi trực tiếp:
+
+```cmd
+:: Chỉ compile
+generate.bat --phases compile
+
+:: Sinh + validate + solve cho 10 test đầu
+generate.bat --phases generate,validate,solve --tests 01-10
+
+:: Retry tự động
+generate.bat --retry
+
+:: Validate toàn bộ, không dừng khi lỗi
+generate.bat --phases validate --continue-on-error
+
+:: Gọi trực tiếp một phase script (từ thư mục gốc)
+scripts\phase_validate.bat --tests 03,07
+
+:: Xem hướng dẫn
+generate.bat /?
+```
+
+> **Lưu ý:** Luôn chạy `generate.bat` và các phase scripts từ thư mục gốc của dự án (nơi chứa `script.txt`). Các phase scripts trong `scripts\` tự động điều hướng về thư mục gốc khi được gọi trực tiếp.
+
 ### 2\. Chấm thử một lời giải (Local Evaluation)
 
 Bạn có một file code giải thuật (ví dụ `sol/brute.cpp`) và muốn biết nó sẽ được bao nhiêu điểm, bị Time Limit hay Wrong Answer ở đâu trên bộ test vừa sinh?
