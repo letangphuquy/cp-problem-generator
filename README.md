@@ -11,7 +11,9 @@ Dự án này tuân thủ nguyên tắc **Separation of Concerns (Phân tách tr
 
 ## ✨ Tính năng nổi bật
 
-  * **Kiến trúc 3 Pha (3-Phase Architecture):** Tối ưu hóa tốc độ sinh test bằng cách Xử lý lô (Bulk Processing), giảm thiểu hiện tượng Context Switching trên hệ điều hành.
+  * **Kiến trúc 4 Pha tách biệt (4-Phase Architecture):** Pipeline được chia thành 4 script độc lập (`phase_compile`, `phase_generate`, `phase_validate`, `phase_solve`) và điều phối bởi một orchestrator duy nhất (`generate.sh`), giúp dễ debug, tái sử dụng và mở rộng.
+  * **CLI linh hoạt:** Chỉ định phase cần chạy, subset test cụ thể, hoặc chỉ retry các test bị lỗi — tất cả qua flag dòng lệnh.
+  * **Log & Retry tự động:** Mỗi lần chạy, kết quả của từng test được ghi vào `tests/run.log`. Dùng `--retry` để tự động tái chạy đúng các test đã thất bại mà không cần chỉ định thủ công.
   * **Tích hợp Testlib.h:** Ngăn chặn tuyệt đối các rác (khoảng trắng thừa, ký tự ẩn, số ngoài giới hạn) lọt vào file input.
   * **Đa nền tảng (Cross-platform):** Hỗ trợ Native trên cả Windows (`generate.bat`) và Linux/macOS (`generate.sh`).
   * **Python Auto-Evaluator:** Tự động biên dịch và chấm điểm các file `.cpp` giải thuật khác với bảng Report trực quan (hiển thị Verdict AC, WA, TLE, RTE và thời gian chạy).
@@ -21,19 +23,26 @@ Dự án này tuân thủ nguyên tắc **Separation of Concerns (Phân tách tr
 
 ```text
 📦 prime-test-generator
-├── 📜 README.md          # File hướng dẫn này
-├── 📜 .gitignore         # Loại bỏ các file rác/binary khỏi Git
-├── 📜 generate.bat       # Script sinh test cho Windows
-├── 📜 generate.sh        # Script sinh test cho Linux/macOS
-├── 📜 evaluate.py        # Công cụ chấm điểm cục bộ (Local Judger)
-├── 📜 script.txt         # Kịch bản sinh test (Cấu hình số lượng, tham số)
-├── 🛠️ gen.cpp            # Mã nguồn sinh Input (.inp)
-├── 🛠️ validator.cpp      # Mã nguồn kiểm duyệt Input (Dùng testlib.h)
-├── 🛠️ testlib.h          # Thư viện chuẩn của Codeforces (Cần tải về)
-├── 📂 sol/               # Thư mục chứa các lời giải
-│   ├── 🏆 model.cpp      # Thuật chuẩn (Tối ưu nhất - Dùng để sinh .out)
-│   └── 🐢 brute.cpp      # Thuật trâu (Dùng để test thử TLE/WA)
-└── 📂 tests/             # Thư mục chứa các file .inp và .out (Tự động sinh ra)
+├── 📜 README.md                    # File hướng dẫn này
+├── 📜 .gitignore                   # Loại bỏ các file rác/binary khỏi Git
+├── 📜 generate.bat                 # Script sinh test cho Windows (legacy)
+├── 📜 generate.sh                  # Orchestrator chính cho Linux/macOS
+├── 📜 evaluate.py                  # Công cụ chấm điểm cục bộ (Local Judger)
+├── 📜 script.txt                   # Kịch bản sinh test (Cấu hình số lượng, tham số)
+├── 🛠️ gen.cpp                      # Mã nguồn sinh Input (.inp)
+├── 🛠️ validator.cpp                # Mã nguồn kiểm duyệt Input (Dùng testlib.h)
+├── 🛠️ testlib.h                    # Thư viện chuẩn của Codeforces (Cần tải về)
+├── 📂 scripts/                     # Các script pha con (phase scripts)
+│   ├── 📜 common.sh                # Tiện ích dùng chung (màu sắc, logging, parse spec, log)
+│   ├── 📜 phase_compile.sh         # Pha 1: Biên dịch gen / val / sol/model
+│   ├── 📜 phase_generate.sh        # Pha 2: Sinh file .inp
+│   ├── 📜 phase_validate.sh        # Pha 3: Kiểm duyệt file .inp
+│   └── 📜 phase_solve.sh           # Pha 4: Chạy model để sinh file .out
+├── 📂 sol/                         # Thư mục chứa các lời giải
+│   ├── 🏆 model.cpp                # Thuật chuẩn (Tối ưu nhất - Dùng để sinh .out)
+│   └── 🐢 brute.cpp                # Thuật trâu (Dùng để test thử TLE/WA)
+└── 📂 tests/                       # Thư mục chứa .inp / .out và run.log
+    └── 📜 run.log                  # Log kết quả từng test (tự động sinh ra)
 ```
 
 ## ⚙️ Yêu cầu hệ thống
@@ -63,6 +72,105 @@ Hệ thống sẽ đọc cấu hình từ `script.txt`, tự động biên dịc
     chmod +x generate.sh
     ./generate.sh
     ```
+
+### 1b\. Tuỳ chỉnh pipeline với CLI (Linux/macOS)
+
+`generate.sh` là một **orchestrator** hỗ trợ đầy đủ CLI flags để kiểm soát chính xác pha nào chạy, test nào được xử lý, và cách xử lý lỗi.
+
+**Cú pháp:**
+
+```bash
+./generate.sh [--phases <list>] [--tests <spec>] [--retry] [--continue-on-error] [--clean]
+```
+
+| Flag | Mặc định | Mô tả |
+|------|----------|-------|
+| `--phases <list>` | `compile,generate,validate,solve` | Các pha cần chạy, phân cách bởi dấu phẩy |
+| `--tests <spec>` | `all` | Subset test cần xử lý (xem cú pháp bên dưới) |
+| `--retry` | — | Tự động chỉ retry các test đã fail ở lần chạy trước |
+| `--continue-on-error` | — | Không dừng khi gặp lỗi validate; log tất cả lỗi rồi tiếp tục |
+| `--clean` | — | Xóa file `.inp` cũ của các test được chọn trước khi sinh lại |
+| `-h`, `--help` | — | Hiển thị hướng dẫn sử dụng |
+
+**Cú pháp `--tests <spec>`:**
+
+| Ví dụ | Ý nghĩa |
+|-------|---------|
+| `all` | Tất cả test trong `script.txt` |
+| `05` | Chỉ test số 5 |
+| `01,03,07` | Test 01, 03 và 07 |
+| `01-10` | Test 01 đến 10 |
+| `01-05,07,10-12` | Kết hợp range và từng số |
+
+**Ví dụ thực tế:**
+
+```bash
+# Chạy toàn bộ pipeline (mặc định)
+./generate.sh
+
+# Chỉ biên dịch lại (không đụng đến tests/)
+./generate.sh --phases compile
+
+# Sinh + validate + solve cho 10 test đầu (bỏ qua compile)
+./generate.sh --phases generate,validate,solve --tests 01-10
+
+# Chỉ validate lại test 03 và 07
+./generate.sh --phases validate --tests 03,07
+
+# Retry tự động: chỉ chạy lại các test đã fail trong lần trước
+./generate.sh --retry
+
+# Validate toàn bộ nhưng không dừng khi có lỗi (ghi log tất cả lỗi)
+./generate.sh --phases validate --continue-on-error
+
+# Sinh lại toàn bộ từ đầu (xóa file cũ)
+./generate.sh --phases generate,validate,solve --clean
+```
+
+**Log file (`tests/run.log`):**
+
+Mỗi lần chạy, kết quả từng test được ghi vào `tests/run.log` với định dạng:
+```
+test01 generate ok
+test01 validate ok
+test01 solve ok
+test05 validate fail
+```
+Flag `--retry` đọc file này và tự động xác định test nào cần chạy lại.
+
+### 1c\. Tuỳ chỉnh pipeline với CLI (Windows CMD)
+
+`generate.bat` hoàn toàn đồng bộ tính năng với `generate.sh`. Tất cả flags đều dùng cùng tên.
+
+**Cú pháp:**
+
+```cmd
+generate.bat [--phases <list>] [--tests <spec>] [--retry] [--continue-on-error] [--clean]
+```
+
+Các phase scripts cũng có thể gọi trực tiếp:
+
+```cmd
+:: Chỉ compile
+generate.bat --phases compile
+
+:: Sinh + validate + solve cho 10 test đầu
+generate.bat --phases generate,validate,solve --tests 01-10
+
+:: Retry tự động
+generate.bat --retry
+
+:: Validate toàn bộ, không dừng khi lỗi
+generate.bat --phases validate --continue-on-error
+
+:: Gọi trực tiếp một phase script (từ thư mục gốc)
+scripts\phase_validate.bat --tests 03,07
+
+:: Xem hướng dẫn
+generate.bat /?
+```
+
+> **Lưu ý:** Luôn chạy `generate.bat` và các phase scripts từ thư mục gốc của dự án (nơi chứa `script.txt`). Các phase scripts trong `scripts\` tự động điều hướng về thư mục gốc khi được gọi trực tiếp.
 
 ### 2\. Chấm thử một lời giải (Local Evaluation)
 
