@@ -63,6 +63,21 @@ Dự án này tuân thủ nguyên tắc **Separation of Concerns (Phân tách tr
   * **Chống tràn số tuyệt đối:** Mã nguồn lõi (mặc định là bài toán Số nguyên tố) được cấu hình ép kiểu `__int128_t` và thuật toán Miller-Rabin để xử lý an toàn các số lên tới $10^{18}$.
   * **Shared Solver Core:** Logic lõi của bài toán được tập trung trong `solution.h`; các tool khác (`gen.cpp`, `evaluate.py`, `validator.cpp`) tái sử dụng cùng logic để tránh lệch kết quả.
 
+## 🪟 Windows Native Support Matrix
+
+Windows được support theo mức độ thực dụng, không ép mọi pipeline phải giống Linux 100%.
+
+| Module | Windows native | Ghi chú |
+|---|---:|---|
+| `check-config` / `config_validator.py` | Có | Chạy native qua Python |
+| Compile / Generate / Validate / Solve cho bài traditional | Có | Dùng `compile.py`, `generate_testdata.py`, `phase_*.bat` |
+| Custom checker (`testlib.h`) | Có | Native được nếu checker không phụ thuộc POSIX-specific behavior |
+| Interactive runner | Không cam kết v1 | Linux/WSL2 là acceptance target; Windows chỉ best-effort |
+| Stress check model vs brute | Có | Chạy native được nếu solution/toolchain hỗ trợ |
+| Git Bash smoke test | Có | Chỉ nên dùng để test nhanh CLI, không xem là môi trường interactive chuẩn |
+
+**Nguyên tắc:** Nếu một tính năng phụ thuộc mạnh vào pipe semantics, async IO, hoặc `/proc`, thì ưu tiên Linux/WSL2 thay vì cố bảo đảm parity tuyệt đối trên Windows.
+
 ## 📁 Cấu trúc dự án
 
 ```text

@@ -50,6 +50,13 @@ Without architecture-level abstraction, each new problem type forces ad-hoc bran
 2. Add distributed judge workers in this phase
 3. Replace all shell wrappers immediately (backward compatibility retained)
 
+## 3.3 Platform Support Policy
+
+1. Core non-interactive pipeline (config validation, build, generate, validate, solve, checker evaluation) must support Windows native and Linux.
+2. Interactive pipeline is Linux/WSL2-first for release acceptance in v1.
+3. Windows interactive support is best-effort and tracked separately from release-blocking gates.
+4. Git Bash on Windows is valid for smoke-testing wrappers and CLI wiring only.
+
 ## 4. Proposed Manifest Contract
 
 File: `problem.toml`
@@ -334,6 +341,7 @@ This RFC is considered implemented when:
 3. Checker and interactive verdict mapping is deterministic and test-covered
 4. Cross-phase cache invalidation is correct under source, input, and toolchain changes
 5. Legacy scripts become wrappers over the same core engine
+6. Windows native support is verified for non-interactive pipelines, while interactive release gates remain Linux/WSL2-first
 
 ## 14. Suggested Next Steps (Execution)
 

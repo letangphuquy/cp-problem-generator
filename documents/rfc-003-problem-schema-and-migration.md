@@ -1,4 +1,4 @@
-# RFC-003: Official problem.toml Schema and Migration Checklist
+# RFC-003: Schema v1.1 - Pragmatic HSG Edition
 
 - Status: Draft
 - Date: 2026-04-13
@@ -13,13 +13,47 @@
 
 ## 1. Summary
 
-This RFC defines the official schema v1 for problem.toml and a practical migration plan from the current script-first implementation to the new engine architecture.
+This RFC defines the pragmatic schema v1.1 for problem.toml and a migration plan optimized for local HSG/OLP tooling.
 
 Core objectives:
 
 1. Freeze one stable contract for configuration-driven pipelines.
 2. Eliminate hardcoded behavior switches by file-name heuristics.
 3. Provide a realistic sprint plan with acceptance criteria and rollback gates.
+
+## 1.1 V1.1 Decisions (Normative)
+
+These decisions override older v1 wording in the rest of this document.
+
+1. `problem.toml` describes the arena only.
+- It must not contain `build.solution`.
+- The contestant submission path is supplied at runtime via CLI, for example `judge run <contestant_code> [--model <model_code>]`.
+
+2. Subtasks are merged into one table.
+- Use a single `[[subtasks]]` registry.
+- Each subtask stores both gating and scoring metadata.
+- The engine must not maintain separate `evaluation.subtasks` and `scoring.subtasks` tables in v1.1.
+
+3. Grader build surface is explicit.
+- Use `[build.internal_grader]` for the hidden main/ABI side.
+- Use `[build.public_header]` for exported headers visible to contestant code.
+
+4. Cache scope is pragmatic.
+- Keep only local caches needed for v1.
+- Use source `mtime` plus input hash for fast invalidation.
+- Do not require distributed cache or toolchain fingerprinting in v1.1.
+
+5. Interactive is Linux-first.
+- v1 acceptance target is Linux/WSL2.
+- Windows support is best-effort.
+- Transcript format is JSONL.
+- Async I/O is mandatory.
+- Core non-interactive commands are required to run on Windows native.
+- Git Bash on Windows is only a smoke-test layer for CLI scripts.
+
+6. Memory reporting is best-effort.
+- Use `/proc/[pid]/status` VmPeak for reporting where available.
+- Do not depend on RSS alone for hard MLE verdicts in v1.1 unless cgroup enforcement is present.
 
 ## 2. Design Principles
 
@@ -37,7 +71,10 @@ Core objectives:
 4. Deterministic defaults:
 - Comparator, limits, and cache policies must have explicit defaults.
 
-## 3. Official Schema v1
+## 3. Legacy Schema v1 Reference
+
+The remaining sections in this document preserve legacy v1.0 material for reference.
+Implementations must follow the V1.1 decisions in Section 1.1 when there is any conflict.
 
 ## 3.1 Top-level
 
@@ -80,6 +117,22 @@ include_dirs = ["."]                    # include search paths
 defines = []                             # e.g. ["LOCAL", "DEBUG"]
 flags = ["-O2", "-std=c++17"]          # override/extend default compile flags
 
+[[build.units]]
+name = "solution"
+sources = ["sol/model.cpp"]
+role = "solution"                       # solution | grader_main | checker | interactor | library
+entry = false
+
+[[build.units]]
+name = "grader"
+sources = ["grader.cpp"]
+role = "grader_main"
+entry = true
+
+[build.link]
+target = "sol_exec"
+units = ["solution", "grader"]
+
 [run]
 time_limit_ms = 1000
 memory_limit_mb = 256
@@ -92,6 +145,20 @@ ignore_trailing_spaces = true
 ignore_blank_lines = false
 checker_exit_map = { AC = 0, WA = 1, FAIL = 3, PARTIAL = 7 }
 
+[[evaluation.subtasks]]
+id = 1
+name = "samples"
+points = 10
+dependencies = []
+enabled = true
+
+[[evaluation.subtasks]]
+id = 2
+name = "hard"
+points = 90
+dependencies = [1]
+enabled = true
+
 [generation]
 script = "script.txt"                   # optional
 input_pattern = "tests/test{index:02d}.inp"
@@ -103,6 +170,15 @@ stop_on_validation_error = true
 mode = "sum"                            # sum | group-min | custom
 full_score = 100
 allow_partial = false
+
+[[scoring.subtasks]]
+id = 1
+name = "samples"
+weight = 10
+tests = ["01", "02"]
+aggregator = "min"                      # min | sum | avg
+points = 10
+dependencies = []
 
 [cache]
 enabled = true
@@ -119,6 +195,19 @@ log_level = "info"                      # debug | info | warn | error
 [extensions]
 # reserved for local experimentation, not consumed by core engine
 ```
+
+Build surface note:
+
+1. `build.solution` is the reference solution used for generation and solve-side regression.
+2. The judged submission is provided at runtime via CLI `--solution <path>`.
+3. For grader mode, the manifest defines the build surface, not the contestant upload path.
+
+Subtask semantics:
+
+1. `evaluation.subtasks` defines the dependency graph and execution gating.
+2. `scoring.subtasks` defines score weights and aggregation policy.
+3. A subtask may be gated by dependencies even if its score weight exists.
+4. The engine must not infer dependency order from numeric id alone.
 
 ## 3.3 Required/Forbidden Matrix by problem.type
 
@@ -150,8 +239,12 @@ log_level = "info"                      # debug | info | warn | error
 6. For interactive:
 - run.wall_time_limit_ms must be >= run.time_limit_ms
 - process_limit must be >= 2
-7. Paths must be repository-relative and normalize to workspace boundaries.
-8. Unknown keys in core tables are rejected.
+- idle_timeout_ms must be strictly less than wall_clock_limit_ms
+7. If generation.validate_after_generate=true then build.validator is mandatory.
+8. If build.units is declared, build.link must exist and reference valid unit names.
+9. Exactly one unit with entry=true is required for executable targets.
+10. Paths must be repository-relative and normalize to workspace boundaries.
+11. Unknown keys in core tables are rejected.
 
 ## 4. Examples by Problem Type
 
@@ -289,6 +382,30 @@ extra_sources = ["lib/helper.cpp"]
 include_dirs = [".", "lib"]
 flags = ["-O2", "-std=c++17"]
 
+[build.internal_grader]
+source = "grader.cpp"
+role = "main"
+allow_user_edit = false
+
+[build.public_header]
+files = ["solution.h", "lib/helper.h"]
+exported_symbols = ["solution::solve", "solution::read_input", "solution::print_output"]
+
+[[build.units]]
+name = "solution"
+sources = ["sol/model.cpp", "lib/helper.cpp"]
+role = "solution"
+entry = false
+
+[[build.units]]
+name = "grader_main"
+sources = ["grader.cpp"]
+role = "grader_main"
+entry = true
+[build.link]
+target = "sol_exec"
+units = ["solution", "grader_main"]
+
 [run]
 time_limit_ms = 2000
 memory_limit_mb = 512
@@ -300,10 +417,38 @@ mode = "token"
 ignore_trailing_spaces = true
 ignore_blank_lines = false
 
+[[evaluation.subtasks]]
+id = 1
+name = "subtask_1"
+points = 30
+dependencies = []
+enabled = true
+
+[[evaluation.subtasks]]
+id = 2
+name = "subtask_2"
+points = 70
+dependencies = [1]
+enabled = true
+
 [scoring]
 mode = "group-min"
 full_score = 100
 allow_partial = true
+
+[[scoring.subtasks]]
+id = 1
+name = "small"
+weight = 30
+tests = ["01", "02", "03"]
+aggregator = "min"
+
+[[scoring.subtasks]]
+id = 2
+name = "large"
+weight = 70
+tests = ["04", "05", "06", "07"]
+aggregator = "min"
 ```
 
 ## 5. Current-State Gap Analysis
@@ -326,6 +471,34 @@ Current implementation gaps versus schema-driven engine:
 
 Each sprint below assumes 1-2 engineers full-time equivalent. Adjust duration by team size.
 
+## 6.0 Execution Strategy (Core-first)
+
+Before implementing runners, enforce the following order:
+
+1. `check-config` first
+- Parse and validate `problem.toml`
+- Fail fast on missing fields, wrong types, unknown keys, and invalid dependency graphs
+
+2. Strategy Factory second
+- Instantiate `TraditionalStrategy`, `CustomCheckerStrategy`, `InteractiveStrategy`, or `GraderStrategy`
+- Expose common `compile()`, `run()`, and `evaluate()` interface
+
+3. `dry-run` third
+- Execute full pipeline wiring without persisting cache or final artifacts
+- Useful for validating folder structure and manifest-to-files mapping
+
+4. `judge init` for scaffolding
+- Create a problem folder skeleton, manifest template, and sample script layout
+- This is the fastest path for HSG/OLP users to start a new problem
+
+5. `--time-override` for calibration
+- Allow temporary runtime overrides without editing problem.toml
+- Useful for benchmark calibration and limit tuning
+
+6. `--legacy` only as migration fallback
+- If no `problem.toml` exists, permit temporary fallback to old `.sh` scripts
+- Do not let `--legacy` become the final default behavior
+
 ## Sprint 0: Alignment and Baseline (3-5 days)
 
 Tasks:
@@ -333,6 +506,7 @@ Tasks:
 1. Freeze RFC-001, RFC-002, RFC-003 as architecture baseline.
 2. Add architecture decision log and ownership map.
 3. Define compatibility policy with existing CLI commands.
+4. Implement `judge check-config` as a mandatory manifest validation gate.
 
 Deliverables:
 
@@ -370,6 +544,7 @@ Tasks:
 2. Port current traditional flow into TraditionalPipeline.
 3. Add PipelineFactory with type=traditional route.
 4. Keep existing evaluate CLI as compatibility wrapper.
+5. Add `judge dry-run <problem_folder>` for non-persistent validation of the wiring.
 
 Deliverables:
 
@@ -407,6 +582,7 @@ Tasks:
 1. Implement multi-source compile/link (grader + solution + extras).
 2. Add include_dirs/defines support.
 3. Add compile cache key extensions for multi-source build graph.
+4. Split grader build surface into `build.internal_grader` and `build.public_header`.
 
 Deliverables:
 
@@ -417,6 +593,25 @@ Exit criteria:
 1. IOI-style fixture compiles and evaluates correctly
 2. Cache invalidates correctly when grader changes
 
+## Sprint 4.5: Quality Gate (Stress Layer) (3-5 days)
+
+Tasks:
+
+1. Add optional cross-check stage during generation: model vs brute on selected/random tests.
+2. Mark testcase invalid if model and brute disagree.
+3. Add CLI flags: `--stress-check`, `--stress-samples N`.
+4. Persist mismatch artifacts for triage.
+
+Deliverables:
+
+1. deterministic stress-check report
+2. integration with generation pipeline stop policy
+
+Exit criteria:
+
+1. At least one seeded stress suite runs in CI.
+2. Any mismatch blocks publish-ready testcase batch.
+
 ## Sprint 5: Interactive Runner (2 weeks)
 
 Tasks:
@@ -425,6 +620,7 @@ Tasks:
 2. Add IPC supervision, idle timeout, kill-tree cleanup.
 3. Add transcript artifacts.
 4. Add stress tests for deadlock and race conditions.
+5. Treat interactive as optional for v1.1 and Linux-first only.
 
 Deliverables:
 
@@ -433,8 +629,9 @@ Deliverables:
 
 Exit criteria:
 
-1. Interactive reliability suite passes on Windows and Linux
-2. No leaked child process across failure scenarios
+1. Interactive reliability suite passes on Linux/WSL2
+2. Windows interactive smoke/stability suite runs and publishes non-blocking defect report
+3. No leaked child process across failure scenarios
 
 ## Sprint 6: Unified Cache Graph and Artifact Policy (1 week)
 
@@ -461,6 +658,7 @@ Tasks:
 2. Update README and command docs.
 3. Add migration guide from legacy commands.
 4. Add CI checks for schema fixtures and integration tests.
+5. Add temporary `--legacy` fallback only for missing-manifest scenarios.
 
 Deliverables:
 
@@ -498,10 +696,13 @@ Exit criteria:
 - Mitigation: include toolchain id, flags, and policy hash in key
 
 3. Risk: interactive instability on Windows
-- Mitigation: dedicated platform parity suite and process-leak checks
+- Mitigation: Linux/WSL2 release gate + Windows non-blocking smoke/stability suite and process-leak checks
 
 4. Risk: checker semantics mismatch across tasks
 - Mitigation: make checker_exit_map mandatory for checker/interactive mode
+
+5. Risk: legacy fallback becomes permanent and prevents migration completion
+- Mitigation: put an expiration policy and CI warning on `--legacy`
 
 ## 8. Recommended Team Working Agreement
 
@@ -519,6 +720,7 @@ A migration is complete when:
 3. Legacy scripts call into the engine instead of owning core logic.
 4. Checker and interactive verdicts are deterministic and test-covered.
 5. Documentation and examples are sufficient for new contributors.
+6. `check-config` and `dry-run` exist as core validation commands.
 
 ## 10. Appendix: Minimal problem.toml Templates
 
