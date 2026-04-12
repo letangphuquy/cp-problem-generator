@@ -4,9 +4,10 @@ Một hệ thống tự động hóa hoàn chỉnh dành cho việc sinh test, k
 
 Dự án này tuân thủ nguyên tắc **Separation of Concerns (Phân tách trách nhiệm)**:
 
+  - `solution.h` chứa logic lời giải dùng chung (`read_input`, `solve`, `print_output`).
   - `gen.cpp` chỉ sinh Input.
   - `validator.cpp` rà soát lỗi Input.
-  - `model.cpp` tính toán Output chuẩn.
+  - `sol/model.cpp` là thin wrapper, gọi `solution::solve()` để sinh Output chuẩn.
   - `Bash/Batch Script` điều phối toàn bộ dây chuyền.
 
 ## ✨ Tính năng nổi bật
@@ -29,6 +30,7 @@ Dự án này tuân thủ nguyên tắc **Separation of Concerns (Phân tách tr
 ├── 📜 generate.sh                  # Orchestrator chính cho Linux/macOS
 ├── 📜 evaluate.py                  # Công cụ chấm điểm cục bộ (Local Judger)
 ├── 📜 script.txt                   # Kịch bản sinh test (Cấu hình số lượng, tham số)
+├── 🛠️ solution.h                   # Shared solver core (read_input / solve / print_output)
 ├── 🛠️ gen.cpp                      # Mã nguồn sinh Input (.inp)
 ├── 🛠️ validator.cpp                # Mã nguồn kiểm duyệt Input (Dùng testlib.h)
 ├── 🛠️ testlib.h                    # Thư viện chuẩn của Codeforces (Cần tải về)
@@ -39,7 +41,7 @@ Dự án này tuân thủ nguyên tắc **Separation of Concerns (Phân tách tr
 │   ├── 📜 phase_validate.sh        # Pha 3: Kiểm duyệt file .inp
 │   └── 📜 phase_solve.sh           # Pha 4: Chạy model để sinh file .out
 ├── 📂 sol/                         # Thư mục chứa các lời giải
-│   ├── 🏆 model.cpp                # Thuật chuẩn (Tối ưu nhất - Dùng để sinh .out)
+│   ├── 🏆 model.cpp                # Thin wrapper: main() gọi solution::solve()
 │   └── 🐢 brute.cpp                # Thuật trâu (Dùng để test thử TLE/WA)
 └── 📂 tests/                       # Thư mục chứa .inp / .out và run.log
     └── 📜 run.log                  # Log kết quả từng test (tự động sinh ra)
@@ -195,31 +197,37 @@ Khi truyền một thư mục, script sẽ quét tất cả file `.cpp` bên tro
 
 ## 🛠 Cách tùy biến cho bài toán mới
 
-Nếu bạn muốn dùng bộ khung này để ra đề cho một bài toán khác, hãy làm theo 4 bước sau:
+Nếu bạn muốn dùng bộ khung này để ra đề cho một bài toán khác, hãy làm theo 5 bước sau:
 
-**Bước 1: Cập nhật `sol/model.cpp`**
+**Bước 1: Cập nhật `solution.h` (khuyến nghị)**
 
-  - Viết thuật toán chuẩn xác và tối ưu nhất của bạn vào file này.
-  - Nó sẽ đọc từ `stdin` và in đáp án đúng ra `stdout`.
+  - Viết logic lõi của bài toán vào `solution.h` với 3 hàm: `read_input()`, `solve()`, `print_output()`.
+  - Mục tiêu là để cả `sol/model.cpp` và các tool khác (ví dụ `gen.cpp` cho QA in-place) có thể tái sử dụng cùng một logic.
 
-**Bước 2: Viết lại `gen.cpp`**
+**Bước 2: Giữ `sol/model.cpp` ở dạng thin wrapper**
+
+  - `model.cpp` chỉ cần `#include "../solution.h"` và gọi `solution::solve()` trong `main()`.
+  - Tránh đặt lại thuật toán đầy đủ trong file này để không bị duplicate logic.
+
+**Bước 3: Viết lại `gen.cpp`**
 
   - Xóa logic sinh số nguyên tố cũ.
   - Viết các hàm sinh dữ liệu ngẫu nhiên (ví dụ sinh mảng, sinh đồ thị, sinh chuỗi) cho bài toán mới.
   - **Lưu ý:** Chỉ dùng `cout` để in ra chuẩn format đầu vào, KHÔNG in ra đáp án.
   - Sử dụng `argc` và `argv` để truyền tham số từ script vào.
 
-**Bước 3: Viết lại `validator.cpp`**
+**Bước 4: Viết lại `validator.cpp`**
 
   - Sử dụng các hàm của `testlib.h` như `inf.readInt()`, `inf.readSpace()`, `inf.readEoln()`, `inf.readEof()` để đảm bảo file Input sinh ra đúng 100% format cấu trúc bạn quy định.
 
-**Bước 4: Thiết lập kịch bản `script.txt`**
+**Bước 5: Thiết lập kịch bản `script.txt`**
 
   - Liệt kê các lệnh để định hướng `gen.cpp`.
   - Có thể dùng cú pháp `# Comment` ở cuối dòng để ghi chú mục đích của test case đó (ví dụ: test edge case, test array all zeros, v.v...).
 
 ## 💡 Best Practices được áp dụng
 
+  - **Shared Solver Core:** Đặt logic lời giải trong `solution.h` để tránh lệch logic giữa model và các tool phụ trợ (generator/evaluator/QA script).
   - **Inline Comment Safe:** Các dòng trong `script.txt` có thể có comment cuối dòng bằng `#`; Bash script sẽ cắt phần comment trước khi gọi `gen`, còn `gen.cpp` cũng dừng parse tại token bắt đầu bằng `#`.
   - **Strict Validation:** Mọi file Input sinh ra đều phải đi qua chốt kiểm tra `validator`. Nếu sai format (dù chỉ là 1 khoảng trắng), phase validate sẽ báo fail; bạn có thể dùng `--continue-on-error` để ghi nhận toàn bộ lỗi trước khi dừng.
   - **No stderr hacking:** Không còn dùng `cerr` để luồn lách ghi output. Quy trình 1 chiều chuẩn mực: Input -\> Logic -\> Output.
