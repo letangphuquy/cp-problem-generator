@@ -1,0 +1,37 @@
+{
+  "test01": {
+    "gen_hash": "583b778ce0b4fcb075b810315ecc04d06db6f0de23e1a01529b670fa78ca2642",
+    "gen_args": "exact 1 1001",
+    "input_hash": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+  },
+  "test02": {
+    "gen_hash": "583b778ce0b4fcb075b810315ecc04d06db6f0de23e1a01529b670fa78ca2642",
+    "gen_args": "exact 2 1002",
+    "input_hash": "df4e26a04a444901b95afef44e4a96cfae34690fff2ad2c66389c70079cdff2b"
+  },
+  "test03": {
+    "gen_hash": "583b778ce0b4fcb075b810315ecc04d06db6f0de23e1a01529b670fa78ca2642",
+    "gen_args": "exact 3 1003",
+    "input_hash": "24ba1e99dc06b19351323aae0d7370243d586475a634b7f6ff7927fbc72cfaed"
+  },
+  "test04": {
+    "gen_hash": "583b778ce0b4fcb075b810315ecc04d06db6f0de23e1a01529b670fa78ca2642",
+    "gen_args": "exact 4 1004",
+    "input_hash": "7c468f5e59f2871b946e051445493bbcace531d597edbbcc9935e7d02d025114"
+  },
+  "test05": {
+    "gen_hash": "583b778ce0b4fcb075b810315ecc04d06db6f0de23e1a01529b670fa78ca2642",
+    "gen_args": "exact 11 1005",
+    "input_hash": "412a8da13330793d63a3a17bed32c76be361edad27fe0f6a0ceb144d3f0aa50e"
+  },
+  "test06": {
+    "gen_hash": "583b778ce0b4fcb075b810315ecc04d06db6f0de23e1a01529b670fa78ca2642",
+    "gen_args": "exact 91 1006",
+    "input_hash": "49b7905b38fe9a56996f8340bcedbf62f50a6aa572a70c9be031090e3905fe5e"
+  },
+  "test07": {
+    "gen_hash": "583b778ce0b4fcb075b810315ecc04d06db6f0de23e1a01529b670fa78ca2642",
+    "gen_args": "random 10000 2001",
+    "input_hash": "9fdc88de5bf53bf5a0c3efb29372323a165743fcb640a3990565650b95ed670f"
+  }
+}

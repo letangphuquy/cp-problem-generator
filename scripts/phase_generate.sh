@@ -1,6 +1,7 @@
 #!/bin/bash
 # Phase: Generate Inputs
 # Reads script.txt and produces a .inp file for every requested test.
+# Uses intelligent caching: skips regeneration if gen.cpp and args haven't changed.
 #
 # Usage: ./scripts/phase_generate.sh [--tests <spec>] [--clean]
 #
@@ -13,12 +14,12 @@ source "$(dirname "$0")/common.sh"
 cd "$ROOT_DIR" || exit 1
 
 TESTS_SPEC="all"
-CLEAN=false
+CLEAN_FLAG=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --tests) TESTS_SPEC="$2"; shift 2 ;;
-        --clean) CLEAN=true; shift ;;
+        --clean) CLEAN_FLAG="--clean"; shift ;;
         -h|--help)
             sed -n '/^# Usage:/,/^[^#]/{ /^#/s/^# \?//p }' "$0"
             exit 0 ;;
@@ -27,26 +28,18 @@ while [[ $# -gt 0 ]]; do
 done
 
 echo -e "${CYAN}--- Phase: Generate Inputs ---${NC}"
+echo
 
-mkdir -p tests
-
-TOTAL=$(count_script_tests)
-if [[ "$TOTAL" -eq 0 ]]; then
-    log_error "No test cases found in script.txt"
+# Call Python utility for intelligent testdata generation with caching
+python3 generate_testdata.py --tests "$TESTS_SPEC" $CLEAN_FLAG
+if [ $? -ne 0 ]; then
+    echo
+    log_error "Generate phase failed"
     exit 1
 fi
 
-# Build an indexed array of the runnable lines in script.txt.
-mapfile -t SCRIPT_LINES < <(
-    grep -v '^[[:space:]]*#' "$SCRIPT_FILE" | grep -v '^[[:space:]]*$'
-)
-
-mapfile -t REQUESTED < <(parse_test_spec "$TESTS_SPEC" "$TOTAL")
-
-if [[ ${#REQUESTED[@]} -eq 0 ]]; then
-    log_warn "No tests matched spec: $TESTS_SPEC"
-    exit 0
-fi
+echo
+echo -e "${GREEN}--- Generate phase complete ---${NC}\n"
 
 FAILED=0
 for padded in "${REQUESTED[@]}"; do
