@@ -1,37 +1,37 @@
 Test,brute (verdict),model (verdict),brute (time ms),model (time ms)
-test01,AC,AC,2,27
-test02,AC,AC,17,9
-test03,AC,AC,36,102
-test04,AC,AC,69,53
-test05,AC,AC,49,2
-test06,AC,AC,2,29
-test07,AC,AC,38,27
-test08,AC,AC,99,100
-test09,AC,AC,125,68
-test10,AC,AC,63,26
-test11,AC,AC,2,1
+test01,AC,AC,2,2
+test02,AC,AC,2,4
+test03,AC,AC,2,2
+test04,AC,AC,2,2
+test05,AC,AC,2,2
+test06,AC,AC,2,2
+test07,AC,AC,2,2
+test08,AC,AC,2,2
+test09,AC,AC,3,3
+test10,AC,AC,2,2
+test11,AC,AC,2,3
 test12,AC,AC,2,2
 test13,AC,AC,3,2
 test14,AC,AC,2,2
-test15,AC,AC,1,1
+test15,AC,AC,3,2
 test16,AC,AC,2,2
 test17,AC,AC,2,2
-test18,AC,AC,2,2
-test19,AC,AC,33,3
-test20,AC,AC,25,2
-test21,AC,AC,3,3
-test22,AC,AC,3,3
-test23,AC,AC,23,3
-test24,AC,AC,38,2
+test18,AC,AC,2,3
+test19,AC,AC,44,2
+test20,AC,AC,27,2
+test21,AC,AC,2,2
+test22,AC,AC,3,2
+test23,AC,AC,23,2
+test24,AC,AC,44,2
 test25,AC,AC,2,2
 test26,TLE,AC,1000,2
 test27,TLE,AC,1000,2
-test28,AC,AC,3,3
-test29,AC,AC,25,2
+test28,AC,AC,2,2
+test29,AC,AC,26,2
 test30,TLE,AC,1000,2
-test31,TLE,AC,1000,2
-test32,AC,AC,843,2
+test31,TLE,AC,1000,1
+test32,TLE,AC,1000,2
 
-Total Score,28/32,32/32
-Max Time (ms),1000,102
-Memory (MB),4.2,3.2
+Total Score,27/32,32/32
+Max Time (ms),1000,4
+Memory (MB),3.1,1.7

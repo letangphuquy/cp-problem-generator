@@ -59,7 +59,15 @@ def collect_cpp_targets(raw_targets: Iterable[str]) -> List[Path]:
     seen: Set[Path] = set()
 
     for raw_target in raw_targets:
-        candidate = Path(raw_target)
+        # Check if it's a simple solution name (no path separators, no .cpp)
+        # If so, expand it as sol/<name>.cpp
+        expanded_target = raw_target
+        if "/" not in raw_target and "\\" not in raw_target and not raw_target.endswith(".cpp"):
+            expanded_path = Path("sol") / f"{raw_target}.cpp"
+            if expanded_path.exists():
+                expanded_target = str(expanded_path)
+        
+        candidate = Path(expanded_target)
         matches: List[Path]
 
         if candidate.exists():
@@ -68,7 +76,7 @@ def collect_cpp_targets(raw_targets: Iterable[str]) -> List[Path]:
             else:
                 matches = [candidate] if candidate.suffix.lower() == ".cpp" else []
         else:
-            matches = [Path(match) for match in sorted(glob.glob(raw_target, recursive=True)) if Path(match).suffix.lower() == ".cpp"]
+            matches = [Path(match) for match in sorted(glob.glob(expanded_target, recursive=True)) if Path(match).suffix.lower() == ".cpp"]
 
         for match in matches:
             resolved = match.resolve()
@@ -114,6 +122,9 @@ def compile_solution(cpp_file: Path, build_dir: Path) -> Path:
     is_windows = platform.system() == "Windows"
     exe_suffix = ".exe" if is_windows else ""
     
+    # Place executable in the same directory as source file
+    exe_path = cpp_file.parent / f"{cpp_file.stem}{exe_suffix}"
+    
     file_hash = compute_file_hash(cpp_file)
     cache_key = str(cpp_file.resolve())
     
@@ -124,16 +135,8 @@ def compile_solution(cpp_file: Path, build_dir: Path) -> Path:
         cached_exe = Path(cached_data["exe"])
         if cached_exe.exists():
             print(f"✅ {cpp_file.name} (skipped - no changes)")
-            digest = hashlib.sha1(str(cpp_file.resolve()).encode("utf-8")).hexdigest()[:8]
-            exe_path = build_dir / f"{cpp_file.stem}_{digest}{exe_suffix}"
-            if not exe_path.exists():
-                import shutil
-                shutil.copy2(cached_exe, exe_path)
-            return exe_path
+            return cached_exe
     
-    digest = hashlib.sha1(str(cpp_file.resolve()).encode("utf-8")).hexdigest()[:8]
-    exe_path = build_dir / f"{cpp_file.stem}_{digest}{exe_suffix}"
-
     print(f"⏳ Đang tự động biên dịch {cpp_file.name}...")
     compile_cmd = ["g++", "-O3", "-std=c++17", str(cpp_file), "-o", str(exe_path)]
 
@@ -415,9 +418,10 @@ def evaluate_solutions(cpp_files: List[Path], tests: List[TestCase], build_dir: 
 
 def main() -> None:
     if len(sys.argv) < 2:
-        print("Usage: python evaluate.py <đường_dẫn_cpp|thư_mục|glob> [<target2> ...]")
+        print("Usage: python evaluate.py <đường_dẫn_cpp|thư_mục|tên_sol|glob> [<target2> ...]")
+        print("Ví dụ: python evaluate.py brute")
+        print("Ví dụ: python evaluate.py brute model")
         print("Ví dụ: python evaluate.py sol/brute.cpp")
-        print("Ví dụ: python evaluate.py sol/brute.cpp sol/model.cpp")
         print("Ví dụ: python evaluate.py sol")
         sys.exit(1)
 
