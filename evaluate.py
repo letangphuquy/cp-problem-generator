@@ -1,10 +1,7 @@
 import glob
-import hashlib
-import json
 import platform
 import subprocess
 import sys
-import tempfile
 import time
 import threading
 import csv
@@ -16,28 +13,6 @@ import psutil
 from PIL import Image, ImageDraw, ImageFont
 
 TIME_LIMIT = 1.0
-COMPILE_CACHE_FILE = Path(".eval_cache.json")
-
-
-def load_compile_cache() -> dict:
-    if COMPILE_CACHE_FILE.exists():
-        try:
-            return json.loads(COMPILE_CACHE_FILE.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, IOError):
-            return {}
-    return {}
-
-
-def save_compile_cache(cache: dict) -> None:
-    COMPILE_CACHE_FILE.write_text(json.dumps(cache, indent=2), encoding="utf-8")
-
-
-def compute_file_hash(cpp_file: Path) -> str:
-    sha256 = hashlib.sha256()
-    with open(cpp_file, "rb") as f:
-        for chunk in iter(lambda: f.read(4096), b""):
-            sha256.update(chunk)
-    return sha256.hexdigest()
 
 
 @dataclass(frozen=True)
@@ -114,43 +89,34 @@ def load_tests() -> List[TestCase]:
     return test_cases
 
 
-def compile_solution(cpp_file: Path, build_dir: Path) -> Path:
-    if not cpp_file.exists():
-        print(f"❌ Không tìm thấy file: {cpp_file}")
+def compile_solutions(cpp_files: List[Path]) -> List[Path]:
+    """Compile C++ files using compile.py utility with smart caching."""
+    cpp_file_strs = [str(cpp.resolve()) for cpp in cpp_files]
+    
+    compile_script = Path("compile.py")
+    if not compile_script.exists():
+        print("❌ compile.py not found!")
         sys.exit(1)
-
+    
+    result = subprocess.run(
+        [sys.executable, str(compile_script)] + cpp_file_strs,
+        capture_output=True,
+        text=True
+    )
+    
+    # Print compile output
+    if result.stdout:
+        print(result.stdout, end="")
+    
+    if result.returncode != 0:
+        if result.stderr:
+            print(result.stderr, file=sys.stderr)
+        sys.exit(1)
+    
+    # Return executable paths
     is_windows = platform.system() == "Windows"
     exe_suffix = ".exe" if is_windows else ""
-    
-    # Place executable in the same directory as source file
-    exe_path = cpp_file.parent / f"{cpp_file.stem}{exe_suffix}"
-    
-    file_hash = compute_file_hash(cpp_file)
-    cache_key = str(cpp_file.resolve())
-    
-    compile_cache = load_compile_cache()
-    cached_data = compile_cache.get(cache_key, {})
-    
-    if cached_data.get("hash") == file_hash and cached_data.get("exe"):
-        cached_exe = Path(cached_data["exe"])
-        if cached_exe.exists():
-            print(f"✅ {cpp_file.name} (skipped - no changes)")
-            return cached_exe
-    
-    print(f"⏳ Đang tự động biên dịch {cpp_file.name}...")
-    compile_cmd = ["g++", "-O3", "-std=c++17", str(cpp_file), "-o", str(exe_path)]
-
-    result = subprocess.run(compile_cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        print(f"❌ Lỗi biên dịch {cpp_file.name}:\n{result.stderr}")
-        sys.exit(1)
-
-    print("✅ Biên dịch thành công!")
-    
-    compile_cache[cache_key] = {"hash": file_hash, "exe": str(exe_path)}
-    save_compile_cache(compile_cache)
-    
-    return exe_path
+    return [cpp.parent / f"{cpp.stem}{exe_suffix}" for cpp in cpp_files]
 
 
 def format_time(ms: float) -> str:
@@ -341,8 +307,8 @@ def render_image(
     print(f"✅ Rendered image saved to {output_file}")
 
 
-def evaluate_solutions(cpp_files: List[Path], tests: List[TestCase], build_dir: Path) -> None:
-    exec_paths = [compile_solution(cpp_file, build_dir) for cpp_file in cpp_files]
+def evaluate_solutions(cpp_files: List[Path], tests: List[TestCase]) -> None:
+    exec_paths = compile_solutions(cpp_files)
     solution_names = [cpp_file.stem for cpp_file in cpp_files]
 
     column_width = 16
@@ -431,11 +397,9 @@ def main() -> None:
         sys.exit(1)
 
     tests = load_tests()
-
-    with tempfile.TemporaryDirectory(prefix="cp_eval_") as tmp_dir:
-        build_dir = Path(tmp_dir)
-        print(f"\nBatch judging {len(targets)} solution(s) across {len(tests)} test(s)\n")
-        evaluate_solutions(targets, tests, build_dir)
+    
+    print(f"\nBatch judging {len(targets)} solution(s) across {len(tests)} test(s)\n")
+    evaluate_solutions(targets, tests)
 
 
 if __name__ == "__main__":
