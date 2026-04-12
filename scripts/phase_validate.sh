@@ -1,6 +1,6 @@
 #!/bin/bash
 # Phase: Validate Inputs
-# Runs the validator binary against every requested .inp file.
+# Runs cached validate phase (deterministic skip when input+validator unchanged).
 #
 # Usage: ./scripts/phase_validate.sh [--tests <spec>] [--continue-on-error]
 #
@@ -27,42 +27,14 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-echo -e "${CYAN}--- Phase: Validate Inputs ---${NC}"
-
-TOTAL=$(count_script_tests)
-mapfile -t REQUESTED < <(parse_test_spec "$TESTS_SPEC" "$TOTAL")
-
-if [[ ${#REQUESTED[@]} -eq 0 ]]; then
-    log_warn "No tests matched spec: $TESTS_SPEC"
-    exit 0
+ARGS=(validate --tests "$TESTS_SPEC")
+if $CONTINUE_ON_ERROR; then
+    ARGS+=(--continue-on-error)
 fi
 
-FAILED=0
-for padded in "${REQUESTED[@]}"; do
-    inp_file="tests/test${padded}.inp"
-
-    if [[ ! -f "$inp_file" ]]; then
-        log_warn "test${padded}.inp not found — skipping"
-        continue
-    fi
-
-    if ./val < "$inp_file" > /dev/null 2>&1; then
-        log_success "test${padded}.inp  [valid]"
-        log_entry "test${padded}" "validate" "ok"
-    else
-        log_error "test${padded}.inp  [INVALID]"
-        log_entry "test${padded}" "validate" "fail"
-        ((FAILED++))
-        if ! $CONTINUE_ON_ERROR; then
-            log_error "Stopping on first validation failure. Use --continue-on-error to continue."
-            exit 1
-        fi
-    fi
-done
-
-if [[ $FAILED -gt 0 ]]; then
-    log_error "Validate phase: $FAILED test(s) failed."
+python3 run_phase_cached.py "${ARGS[@]}"
+if [[ $? -ne 0 ]]; then
     exit 1
 fi
 
-echo -e "${GREEN}--- Validate phase complete (${#REQUESTED[@]} tests) ---${NC}\n"
+echo

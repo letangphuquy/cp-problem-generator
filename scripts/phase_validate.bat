@@ -1,6 +1,6 @@
 @echo off
 :: Phase: Validate Inputs
-:: Runs val.exe against every requested .inp file.
+:: Runs cached validate phase (deterministic skip when input+validator unchanged).
 ::
 :: Usage: scripts\phase_validate.bat [--tests <spec>] [--continue-on-error]
 ::
@@ -11,7 +11,6 @@
 ::                        the first invalid input.
 setlocal EnableDelayedExpansion
 
-SET "SCRIPTS_DIR=%~dp0"
 SET "TESTS_SPEC=all"
 SET "CONTINUE_ON_ERR=0"
 
@@ -28,52 +27,12 @@ IF /I "%~1"=="--help" GOTO SHOW_HELP
 ECHO [ERR ] Unknown option: %~1 >&2
 EXIT /B 1
 :ARGS_DONE
+SET "CONT_FLAG="
+IF "!CONTINUE_ON_ERR!"=="1" SET "CONT_FLAG=--continue-on-error"
 
-ECHO --- Phase: Validate Inputs ---
+python run_phase_cached.py validate --tests "!TESTS_SPEC!" !CONT_FLAG!
+IF ERRORLEVEL 1 EXIT /B 1
 
-:: Count total runnable tests.
-CALL "%SCRIPTS_DIR%common.bat" :COUNT_SCRIPT_TESTS
-
-:: Build list of requested test numbers.
-CALL "%SCRIPTS_DIR%common.bat" :PARSE_TEST_SPEC "!TESTS_SPEC!" !_COUNT!
-
-SET /A _REQ=0
-FOR /F "usebackq tokens=*" %%N IN ("%TEMP%\cp_gen_tests.tmp") DO SET /A _REQ+=1
-IF !_REQ! EQU 0 (
-    ECHO [WARN] No tests matched spec: !TESTS_SPEC!
-    EXIT /B 0
-)
-
-SET /A _FAILED=0
-FOR /F "usebackq tokens=*" %%N IN ("%TEMP%\cp_gen_tests.tmp") DO (
-    SET "_PADDED=%%N"
-    SET "INP_FILE=tests\test!_PADDED!.inp"
-
-    IF NOT EXIST "!INP_FILE!" (
-        ECHO [WARN] test!_PADDED!.inp not found - skipping
-    ) ELSE (
-        val.exe < "!INP_FILE!" > NUL 2>&1
-        IF ERRORLEVEL 1 (
-            ECHO [ERR ] test!_PADDED!.inp  [INVALID] >&2
-            CALL "%SCRIPTS_DIR%common.bat" :LOG_ENTRY "test!_PADDED!" validate fail
-            SET /A _FAILED+=1
-            IF "!CONTINUE_ON_ERR!"=="0" (
-                ECHO [ERR ] Stopping on first validation failure. Use --continue-on-error to continue. >&2
-                EXIT /B 1
-            )
-        ) ELSE (
-            ECHO  [ OK ] test!_PADDED!.inp  [valid]
-            CALL "%SCRIPTS_DIR%common.bat" :LOG_ENTRY "test!_PADDED!" validate ok
-        )
-    )
-)
-
-IF !_FAILED! GTR 0 (
-    ECHO [ERR ] Validate phase: !_FAILED! test^(s^) failed. >&2
-    EXIT /B 1
-)
-
-ECHO --- Validate phase complete ^(!_REQ! tests^) ---
 ECHO.
 EXIT /B 0
 

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Phase: Solve (Generate Outputs)
-# Runs sol/model on every requested .inp file and writes the corresponding
-# .out file.
+# Runs cached solve phase and skips rerun when input+model are unchanged
+# and output hash is still valid.
 #
 # Usage: ./scripts/phase_solve.sh [--tests <spec>]
 #
@@ -24,40 +24,9 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-echo -e "${CYAN}--- Phase: Solve (Generate Outputs) ---${NC}"
-
-TOTAL=$(count_script_tests)
-mapfile -t REQUESTED < <(parse_test_spec "$TESTS_SPEC" "$TOTAL")
-
-if [[ ${#REQUESTED[@]} -eq 0 ]]; then
-    log_warn "No tests matched spec: $TESTS_SPEC"
-    exit 0
-fi
-
-FAILED=0
-for padded in "${REQUESTED[@]}"; do
-    inp_file="tests/test${padded}.inp"
-    out_file="tests/test${padded}.out"
-
-    if [[ ! -f "$inp_file" ]]; then
-        log_warn "test${padded}.inp not found — skipping"
-        continue
-    fi
-
-    if ./sol/model < "$inp_file" > "$out_file"; then
-        log_success "test${padded}.out"
-        log_entry "test${padded}" "solve" "ok"
-    else
-        log_error "test${padded}: model solution exited with code $?"
-        log_entry "test${padded}" "solve" "fail"
-        rm -f "$out_file"
-        ((FAILED++))
-    fi
-done
-
-if [[ $FAILED -gt 0 ]]; then
-    log_error "Solve phase: $FAILED test(s) failed."
+python3 run_phase_cached.py solve --tests "$TESTS_SPEC"
+if [[ $? -ne 0 ]]; then
     exit 1
 fi
 
-echo -e "${GREEN}--- Solve phase complete (${#REQUESTED[@]} tests) ---${NC}\n"
+echo
