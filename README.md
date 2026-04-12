@@ -182,7 +182,14 @@ Chỉ cần chạy lệnh sau:
 python evaluate.py sol/brute.cpp
 ```
 
-Tool sẽ **tự động biên dịch** file cpp đó, chạy qua toàn bộ test trong thư mục `tests/` và trả về bảng kết quả cực kỳ trực quan.
+Tool sẽ **tự động biên dịch** file cpp đó, chạy qua toàn bộ test trong thư mục `tests/` và trả về bảng kết quả cực kỳ trực quan. Bạn cũng có thể judge nhiều lời giải trong một lần chạy:
+
+```bash
+python evaluate.py sol/brute.cpp sol/model.cpp
+python evaluate.py sol
+```
+
+Khi truyền một thư mục, script sẽ quét tất cả file `.cpp` bên trong thư mục đó.
 
 -----
 
