@@ -1,18 +1,43 @@
 import glob
 import hashlib
+import json
 import platform
 import subprocess
 import sys
 import tempfile
 import time
 import threading
+import csv
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Set, Tuple
 
 import psutil
+from PIL import Image, ImageDraw, ImageFont
 
 TIME_LIMIT = 1.0
+COMPILE_CACHE_FILE = Path(".eval_cache.json")
+
+
+def load_compile_cache() -> dict:
+    if COMPILE_CACHE_FILE.exists():
+        try:
+            return json.loads(COMPILE_CACHE_FILE.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, IOError):
+            return {}
+    return {}
+
+
+def save_compile_cache(cache: dict) -> None:
+    COMPILE_CACHE_FILE.write_text(json.dumps(cache, indent=2), encoding="utf-8")
+
+
+def compute_file_hash(cpp_file: Path) -> str:
+    sha256 = hashlib.sha256()
+    with open(cpp_file, "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            sha256.update(chunk)
+    return sha256.hexdigest()
 
 
 @dataclass(frozen=True)
@@ -88,6 +113,24 @@ def compile_solution(cpp_file: Path, build_dir: Path) -> Path:
 
     is_windows = platform.system() == "Windows"
     exe_suffix = ".exe" if is_windows else ""
+    
+    file_hash = compute_file_hash(cpp_file)
+    cache_key = str(cpp_file.resolve())
+    
+    compile_cache = load_compile_cache()
+    cached_data = compile_cache.get(cache_key, {})
+    
+    if cached_data.get("hash") == file_hash and cached_data.get("exe"):
+        cached_exe = Path(cached_data["exe"])
+        if cached_exe.exists():
+            print(f"✅ {cpp_file.name} (skipped - no changes)")
+            digest = hashlib.sha1(str(cpp_file.resolve()).encode("utf-8")).hexdigest()[:8]
+            exe_path = build_dir / f"{cpp_file.stem}_{digest}{exe_suffix}"
+            if not exe_path.exists():
+                import shutil
+                shutil.copy2(cached_exe, exe_path)
+            return exe_path
+    
     digest = hashlib.sha1(str(cpp_file.resolve()).encode("utf-8")).hexdigest()[:8]
     exe_path = build_dir / f"{cpp_file.stem}_{digest}{exe_suffix}"
 
@@ -99,7 +142,11 @@ def compile_solution(cpp_file: Path, build_dir: Path) -> Path:
         print(f"❌ Lỗi biên dịch {cpp_file.name}:\n{result.stderr}")
         sys.exit(1)
 
-    print("✅ Biên dịch thành công!\n")
+    print("✅ Biên dịch thành công!")
+    
+    compile_cache[cache_key] = {"hash": file_hash, "exe": str(exe_path)}
+    save_compile_cache(compile_cache)
+    
     return exe_path
 
 
@@ -111,8 +158,21 @@ def format_memory(memory_mb: float) -> str:
     return f"{memory_mb:.1f}MB"
 
 
+def verdict_color(verdict: str) -> str:
+    colors = {
+        "AC": "\033[92m",
+        "WA": "\033[91m",
+        "TLE": "\033[93m",
+        "RTE": "\033[95m",
+    }
+    return colors.get(verdict, "\033[0m")
+
+
+def colored_verdict(verdict: str) -> str:
+    return f"{verdict_color(verdict)}{verdict}\033[0m"
+
+
 def judge_test(exec_path: Path, test_case: TestCase) -> RunStats:
-    start_time = time.perf_counter()
     process = subprocess.Popen(
         [str(exec_path)],
         stdin=subprocess.PIPE,
@@ -148,7 +208,8 @@ def judge_test(exec_path: Path, test_case: TestCase) -> RunStats:
 
     monitor_thread = threading.Thread(target=monitor_memory, daemon=True)
     monitor_thread.start()
-
+    
+    start_time = time.perf_counter()
     try:
         stdout, stderr = process.communicate(input=test_case.input_text, timeout=TIME_LIMIT)
         elapsed_ms = (time.perf_counter() - start_time) * 1000
@@ -170,21 +231,134 @@ def judge_test(exec_path: Path, test_case: TestCase) -> RunStats:
     return RunStats(verdict=verdict, time_ms=elapsed_ms, memory_mb=max_memory / (1024 * 1024))
 
 
+def export_csv(
+    output_file: Path,
+    solution_names: List[str],
+    tests: List[TestCase],
+    results_matrix: List[List[str]],
+    times_matrix: List[List[float]],
+    scores: List[int],
+    max_times: List[float],
+    max_memories: List[float],
+) -> None:
+    with open(output_file, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        
+        header = ["Test"] + [f"{name} (verdict)" for name in solution_names] + [f"{name} (time ms)" for name in solution_names]
+        writer.writerow(header)
+        
+        for i, test in enumerate(tests):
+            row = [test.name]
+            row.extend(results_matrix[i])
+            row.extend([f"{times_matrix[i][j]:.0f}" for j in range(len(solution_names))])
+            writer.writerow(row)
+        
+        writer.writerow([])
+        writer.writerow(["Total Score"] + [f"{scores[i]}/{len(tests)}" for i in range(len(solution_names))])
+        writer.writerow(["Max Time (ms)"] + [f"{max_times[i]:.0f}" for i in range(len(solution_names))])
+        writer.writerow(["Memory (MB)"] + [f"{max_memories[i]:.1f}" for i in range(len(solution_names))])
+
+
+def render_image(
+    output_file: Path,
+    solution_names: List[str],
+    tests: List[TestCase],
+    results_matrix: List[List[str]],
+    times_matrix: List[List[float]],
+    scores: List[int],
+    max_times: List[float],
+    max_memories: List[float],
+) -> None:
+    verdict_to_rgb = {
+        "AC": (76, 175, 80),
+        "WA": (244, 67, 54),
+        "TLE": (255, 193, 7),
+        "RTE": (156, 39, 176),
+    }
+    
+    col_width = 120
+    row_height = 28
+    header_height = 35
+    
+    num_cols = 1 + len(solution_names)
+    num_rows = len(tests) + 4
+    
+    width = col_width * num_cols
+    height = header_height + row_height * num_rows + 20
+    
+    img = Image.new("RGB", (width, height), color=(255, 255, 255))
+    draw = ImageDraw.Draw(img)
+    
+    try:
+        font_path = "C:\\Windows\\Fonts\\arial.ttf" if platform.system() == "Windows" else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+        bold_font_path = "C:\\Windows\\Fonts\\arialbd.ttf" if platform.system() == "Windows" else "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+        font = ImageFont.truetype(font_path, 10)
+        bold_font = ImageFont.truetype(bold_font_path, 10)
+    except (OSError, IOError):
+        font = ImageFont.load_default()
+        bold_font = font
+    
+    def draw_cell(x: int, y: int, w: int, h: int, text: str, bg_rgb: tuple, fg_rgb: tuple = (0, 0, 0), bold: bool = False) -> None:
+        draw.rectangle([x, y, x + w, y + h], fill=bg_rgb, outline=(200, 200, 200))
+        f = bold_font if bold else font
+        draw.text((x + 5, y + 5), text, fill=fg_rgb, font=f)
+    
+    y = 10
+    
+    draw_cell(0, y, col_width, header_height, "Test", (200, 200, 200), bold=True)
+    for j, sol in enumerate(solution_names):
+        draw_cell((j + 1) * col_width, y, col_width, header_height, sol, (200, 200, 200), bold=True)
+    y += header_height
+    
+    for i, test in enumerate(tests):
+        draw_cell(0, y, col_width, row_height, test.name, (240, 240, 240))
+        for j in range(len(solution_names)):
+            verdict = results_matrix[i][j]
+            time_ms = times_matrix[i][j]
+            cell_text = f"{verdict}\n{format_time(time_ms)}"
+            bg_color = verdict_to_rgb.get(verdict, (255, 255, 255))
+            draw_cell((j + 1) * col_width, y, col_width, row_height, cell_text, bg_color, (0, 0, 0))
+        y += row_height
+    
+    draw_cell(0, y, col_width, row_height, "Total Score", (220, 220, 220), bold=True)
+    for j in range(len(solution_names)):
+        draw_cell((j + 1) * col_width, y, col_width, row_height, f"{scores[j]}/{len(tests)}", (220, 220, 220))
+    y += row_height
+    
+    draw_cell(0, y, col_width, row_height, "Max Time", (220, 220, 220), bold=True)
+    for j in range(len(solution_names)):
+        draw_cell((j + 1) * col_width, y, col_width, row_height, format_time(max_times[j]), (220, 220, 220))
+    y += row_height
+    
+    draw_cell(0, y, col_width, row_height, "Memory Usage", (220, 220, 220), bold=True)
+    for j in range(len(solution_names)):
+        draw_cell((j + 1) * col_width, y, col_width, row_height, format_memory(max_memories[j]), (220, 220, 220))
+    
+    img.save(output_file)
+    print(f"✅ Rendered image saved to {output_file}")
+
+
 def evaluate_solutions(cpp_files: List[Path], tests: List[TestCase], build_dir: Path) -> None:
     exec_paths = [compile_solution(cpp_file, build_dir) for cpp_file in cpp_files]
-    solution_labels = [f"Sol {index + 1}" for index in range(len(cpp_files))]
+    solution_names = [cpp_file.stem for cpp_file in cpp_files]
 
     column_width = 16
-    header = f"{'TEST NAME':<12} | " + " | ".join(f"{label + ' (time)':<{column_width}}" for label in solution_labels)
+    header = f"{'TEST NAME':<12} | " + " | ".join(f"{name:<{column_width}}" for name in solution_names)
     print(header)
     print("-" * len(header))
 
     score_by_solution = [0 for _ in cpp_files]
     max_time_by_solution = [0.0 for _ in cpp_files]
     max_memory_by_solution = [0.0 for _ in cpp_files]
+    
+    results_matrix: List[List[str]] = []
+    times_matrix: List[List[float]] = []
 
     for test_case in tests:
         row_cells: List[str] = []
+        results_row: List[str] = []
+        times_row: List[float] = []
+        
         for index, exec_path in enumerate(exec_paths):
             stats = judge_test(exec_path, test_case)
             if stats.verdict == "AC":
@@ -192,21 +366,51 @@ def evaluate_solutions(cpp_files: List[Path], tests: List[TestCase], build_dir: 
             max_time_by_solution[index] = max(max_time_by_solution[index], stats.time_ms)
             max_memory_by_solution[index] = max(max_memory_by_solution[index], stats.memory_mb)
 
-            cell = f"{stats.verdict} {format_time(stats.time_ms)}"
-            row_cells.append(f"{cell:<{column_width}}")
-
+            colored_verd = colored_verdict(stats.verdict)
+            time_str = format_time(stats.time_ms)
+            cell = f"{colored_verd} {time_str}"
+            row_cells.append(f"{cell:<{column_width + 15}}")
+            
+            results_row.append(stats.verdict)
+            times_row.append(stats.time_ms)
+        
+        results_matrix.append(results_row)
+        times_matrix.append(times_row)
         print(f"{test_case.name:<12} | " + " | ".join(row_cells))
 
     print("-" * len(header))
 
     total_tests = len(tests)
-    total_row = f"{'Total Score':<12} | " + " | ".join(f"{score}/{total_tests:<{column_width - len(str(score)) - len(str(total_tests)) - 1}}" for score in score_by_solution)
+    total_row = f"{'Total Score':<12} | " + " | ".join(f"{score}/{total_tests:<{column_width}}" for score in score_by_solution)
     max_time_row = f"{'Max Time':<12} | " + " | ".join(f"{format_time(value):<{column_width}}" for value in max_time_by_solution)
     memory_row = f"{'Memory Usage':<12} | " + " | ".join(f"{format_memory(value):<{column_width}}" for value in max_memory_by_solution)
 
     print(total_row)
     print(max_time_row)
     print(memory_row)
+    
+    export_csv(
+        Path("results.csv"),
+        solution_names,
+        tests,
+        results_matrix,
+        times_matrix,
+        score_by_solution,
+        max_time_by_solution,
+        max_memory_by_solution,
+    )
+    print(f"\n✅ Results saved to results.csv")
+    
+    render_image(
+        Path("results.png"),
+        solution_names,
+        tests,
+        results_matrix,
+        times_matrix,
+        score_by_solution,
+        max_time_by_solution,
+        max_memory_by_solution,
+    )
 
 
 def main() -> None:
