@@ -78,6 +78,23 @@ Windows được support theo mức độ thực dụng, không ép mọi pipeli
 
 **Nguyên tắc:** Nếu một tính năng phụ thuộc mạnh vào pipe semantics, async IO, hoặc `/proc`, thì ưu tiên Linux/WSL2 thay vì cố bảo đảm parity tuyệt đối trên Windows.
 
+## ✅ Check Config (Bước gate đầu tiên)
+
+Trước khi chạy compile/generate/validate/solve, hãy validate manifest:
+
+```bash
+# Cross-platform
+python judge.py check-config problem.toml
+
+# Windows wrapper
+judge.bat check-config problem.toml
+
+# Linux/macOS wrapper
+./judge.sh check-config problem.toml
+```
+
+Nếu không truyền path, command sẽ mặc định dùng `problem.toml` tại thư mục hiện tại.
+
 ## 📁 Cấu trúc dự án
 
 ```text
